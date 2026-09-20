@@ -1,0 +1,33 @@
+# --- 実行時に生成されるデータ（公開リポジトリに含めない） ---
+jimoty_monitor.db
+*.db
+*.sqlite
+*.sqlite3
+
+# --- 環境変数・秘密情報 ---
+.env
+.env.*
+!.env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+*.log
+logs/
+
+# --- Node / フロントエンド ---
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+
+# --- OS/エディタ生成物 ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
