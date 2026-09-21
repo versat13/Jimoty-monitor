@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { useScanStatus } from "../context/ScanStatusContext";
 import { filterArticlesBySearch, filterArticlesByQuickSearch } from "../utils/pickupSearch";
 import {
   MAIN_TABS,
+  SORT_OPTIONS,
   ARTICLES_PER_PAGE,
   VIEW_MODE_KEY,
   SORT_KEY_KEY,
@@ -16,6 +18,20 @@ import {
   sortArticles,
 } from "../utils/articleListState";
 
+// 2026-09-21新設: 一覧の表示状態 (タブ/ソート/ページ) をURLクエリに
+// 反映するための定数・ヘルパー。対象はこの3つのみ (仕様メモ参照)。
+// カテゴリ・価格・検索条件、表示形式などはスコープ外のためURL化しない。
+const MAIN_TAB_VALUES = new Set(MAIN_TABS.map((t) => t.value));
+const SORT_KEY_VALUES = new Set(SORT_OPTIONS.map((s) => s.value));
+
+function parsePageParam(raw) {
+  if (raw === null) return null;
+  // 1以上の整数のみ正当な値として扱う (それ以外はフォールバック)。
+  if (!/^\d+$/.test(raw)) return null;
+  const n = Number(raw);
+  return n >= 1 ? n : null;
+}
+
 /**
  * ArticleListPage の state 管理・データ取得・派生値計算をまとめた
  * カスタムフック (ArticleListPage.jsx から分割、2026-09-13)。
@@ -24,16 +40,32 @@ import {
  * 渡すだけの薄い層にし、状態遷移のロジックはここに集約する。
  */
 export function useArticleListState() {
+  // 2026-09-21新設: 表示状態 (tab/sort/page) のURL化。自分用の
+  // ブックマークとして機能させるのが目的で、他人との共有はスコープ外
+  // (仕様メモ参照)。react-router-domのuseSearchParamsを使用。
+  const [searchParams, setSearchParams] = useSearchParams();
+
   // 2026-09-04: 旧visibility/statusTabの2state構造を1段タブに統合。
   // mainTabの値はMAIN_TABSのvalueと対応し、そこからstatus/visibilityを
   // 導出する (activeMainTab参照)。
-  const [mainTab, setMainTab] = useState("visible");
+  // 2026-09-21変更: 初期値はURLの`tab`が正当な値ならそれを優先し、
+  // 不正・欠落時は従来どおりのデフォルト("visible")にフォールバックする。
+  const [mainTab, setMainTab] = useState(() => {
+    const fromUrl = searchParams.get("tab");
+    return fromUrl && MAIN_TAB_VALUES.has(fromUrl) ? fromUrl : "visible";
+  });
   const [viewMode, setViewMode] = useState(
     () => localStorage.getItem(VIEW_MODE_KEY) || "card"
   );
-  const [sortKey, setSortKey] = useState(
-    () => localStorage.getItem(SORT_KEY_KEY) || "display_order"
-  );
+  // 2026-09-21変更: 初期値はURLの`sort`が正当な値ならそれを優先する。
+  // 不正・欠落時は既存どおりlocalStorageの値、それも無ければ
+  // "display_order"にフォールバックする (localStorage永続化はそのまま
+  // 維持し、URLに値がない場合のフォールバック先として使う)。
+  const [sortKey, setSortKey] = useState(() => {
+    const fromUrl = searchParams.get("sort");
+    if (fromUrl && SORT_KEY_VALUES.has(fromUrl)) return fromUrl;
+    return localStorage.getItem(SORT_KEY_KEY) || "display_order";
+  });
   const [cardColumns, setCardColumns] = useState(
     () => Number(localStorage.getItem(CARD_COLUMNS_KEY)) || 1
   );
@@ -72,7 +104,12 @@ export function useArticleListState() {
   // 2026-09-08新設: 一覧のページネーション。フィルタ・ソート適用後の
   // 件数を基準に50件区切りで表示する (公式サイトと同じ件数に合わせる、
   // というユーザーとの打ち合わせで合意した仕様)。
-  const [currentPage, setCurrentPage] = useState(1);
+  // 2026-09-21変更: 初期値はURLの`page`が正当な値 (1以上の整数) なら
+  // それを優先し、不正・欠落時は1にフォールバックする。
+  const [currentPage, setCurrentPage] = useState(() => {
+    const fromUrl = parsePageParam(searchParams.get("page"));
+    return fromUrl ?? 1;
+  });
   // 2026-09-05新設: 表モードの列表示/非表示。以前はTableFilterBar内で
   // 完結していたが、共通ヘッダーに列選択UIを引き上げたのに伴い、
   // 状態自体もこのページで管理するようにした (表モードの時だけ表示)。
@@ -80,6 +117,24 @@ export function useArticleListState() {
   const [columnWidths, setColumnWidths] = useState(loadColumnWidths);
   const [columnMenuOpen, setColumnMenuOpen] = useState(false);
   const columnMenuRef = useRef(null);
+
+  // 2026-09-21新設: tab/sort/pageのいずれかが変わるたびにURLクエリを
+  // 書き換える。ブラウザの「戻る」履歴を汚さないようreplace方式で更新
+  // する (pushはしない)。他のクエリパラメータ (将来追加されうるもの)
+  // は保持したまま、この3キーだけを更新する。
+  useEffect(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("tab", mainTab);
+        next.set("sort", sortKey);
+        next.set("page", String(currentPage));
+        return next;
+      },
+      { replace: true }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainTab, sortKey, currentPage]);
 
   useEffect(() => {
     localStorage.setItem(TABLE_COLUMNS_KEY, JSON.stringify([...visibleColumns]));
