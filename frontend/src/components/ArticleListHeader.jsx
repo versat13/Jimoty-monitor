@@ -79,7 +79,9 @@ export default function ArticleListHeader({ state }) {
     <header className="sticky top-0 z-10 bg-paper/95 backdrop-blur pt-5 pb-3 border-b border-line -mx-2 px-2 sm:mx-0 sm:px-0">
       <div className="flex items-center justify-between">
         <h1 className="font-display font-black text-xl tracking-tight">
-          ジモティー新着監視ツール
+          <a href="/" className="hover:text-indigo transition-colors">
+            ジモティー新着監視ツール
+          </a>
         </h1>
         <div className="flex items-center gap-2">
           {/*
